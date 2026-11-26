@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Skyward Archipelago — a ring-course flight game</title>
+<style>
+  html, body { margin: 0; padding: 0; overflow: hidden; background: #10151c;
+    font-family: "Segoe UI", Verdana, Geneva, sans-serif; color: #f5f7fa; }
+  #game { position: fixed; inset: 0; }
+  canvas { display: block; }
+
+  .panel { position: fixed; background: rgba(10, 16, 24, 0.62);
+    border: 1px solid rgba(255, 255, 255, 0.22); border-radius: 10px;
+    padding: 8px 14px; pointer-events: none; }
+  .label { font-size: 11px; letter-spacing: 2px; color: #ffd34d; text-transform: uppercase; }
+  .value { font-size: 34px; font-weight: 700; line-height: 1.05; font-variant-numeric: tabular-nums; }
+  .unit { font-size: 13px; color: #b9c6d4; font-weight: 400; }
+
+  #instruments { top: 14px; left: 14px; display: flex; gap: 22px; }
+  #mission { top: 14px; right: 14px; text-align: right; }
+  #mission .value { font-size: 26px; }
+  #fuel-box { bottom: 16px; right: 16px; width: 210px; }
+  #fuel-track { height: 14px; background: rgba(255,255,255,0.16); border-radius: 7px; overflow: hidden; margin-top: 5px; }
+  #fuel-fill { height: 100%; width: 100%; background: #39d353; }
+  #state-box { bottom: 16px; left: 176px; }
+  #state-box .value { font-size: 20px; }
+  #horizon { position: fixed; left: 16px; bottom: 16px; width: 140px; height: 140px;
+    border-radius: 50%; pointer-events: none; }
+
+  #reticle { position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%);
+    pointer-events: none; opacity: 0.9; }
+  #banner { position: fixed; left: 50%; top: 17%; transform: translateX(-50%);
+    font-size: 25px; font-weight: 700; letter-spacing: 1px; color: #ffe9a8;
+    text-shadow: 0 2px 10px rgba(0,0,0,0.75); opacity: 0; transition: opacity 0.3s;
+    pointer-events: none; text-align: center; white-space: nowrap; }
+  #warning { position: fixed; left: 50%; top: 24%; transform: translateX(-50%);
+    font-size: 19px; font-weight: 700; color: #ff6d5a;
+    text-shadow: 0 2px 8px rgba(0,0,0,0.8); pointer-events: none; }
+  #game-name { position: fixed; top: 14px; left: 50%; transform: translateX(-50%);
+    font-size: 15px; letter-spacing: 4px; color: rgba(255,255,255,0.85);
+    text-shadow: 0 1px 6px rgba(0,0,0,0.7); pointer-events: none; text-transform: uppercase; }
+
+  .screen { position: fixed; inset: 0; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; text-align: center;
+    background: radial-gradient(ellipse at center, rgba(16,28,44,0.25), rgba(8,12,20,0.78));
+    z-index: 5; }
+  .screen h1 { font-size: 52px; margin: 0 0 6px; letter-spacing: 3px; color: #ffd34d;
+    text-shadow: 0 3px 14px rgba(0,0,0,0.8); }
+  .screen h2 { font-size: 20px; font-weight: 400; margin: 0 0 22px; color: #dfe9f2; }
+  .screen p { max-width: 620px; font-size: 16px; line-height: 1.55; color: #c8d6e2; margin: 4px 0; }
+  .screen .keys { color: #ffe9a8; font-weight: 600; }
+  .screen .go { margin-top: 20px; font-size: 19px; color: #fff;
+    border: 1px solid rgba(255,255,255,0.5); border-radius: 24px; padding: 9px 26px;
+    background: rgba(232, 100, 28, 0.85); }
+  #end-screen { display: none; }
+</style>
+</head>
+<body>
+<div id="game"></div>
+
+<div id="game-name">Skyward Archipelago</div>
+
+<div id="instruments" class="panel">
+  <div><div class="label">Altitude</div><div class="value"><span id="hud-alt">0</span> <span class="unit">m</span></div></div>
+  <div><div class="label">Speed</div><div class="value"><span id="hud-spd">0</span> <span class="unit">km/h</span></div></div>
+  <div><div class="label">Heading</div><div class="value"><span id="hud-hdg">000</span><span class="unit">°</span></div></div>
+  <div><div class="label">Climb</div><div class="value"><span id="hud-vsi">0.0</span> <span class="unit">m/s</span></div></div>
+</div>
+
+<div id="mission" class="panel">
+  <div class="label">Score</div><div class="value" id="hud-score">0</div>
+  <div class="label" style="margin-top:4px;">Rings <span id="hud-rings" style="color:#fff; font-size:17px;">0 / 12</span></div>
+  <div class="label" style="margin-top:4px;">Time <span id="hud-timer" style="color:#fff; font-size:17px;">0:00</span></div>
+</div>
+
+<canvas id="horizon" width="140" height="140"></canvas>
+
+<div id="state-box" class="panel">
+  <div class="label">Throttle</div>
+  <div class="value"><span id="hud-thr">0</span><span class="unit"> %</span></div>
+</div>
+
+<div id="fuel-box" class="panel">
+  <div class="label">Fuel <span id="fuel-text" style="color:#fff;">100%</span></div>
+  <div id="fuel-track"><div id="fuel-fill"></div></div>
+</div>
+
+<svg id="reticle" width="54" height="54" viewBox="0 0 54 54">
+  <circle cx="27" cy="27" r="16" fill="none" stroke="#ffd34d" stroke-width="2"/>
+  <line x1="27" y1="2" x2="27" y2="14" stroke="#ffd34d" stroke-width="2"/>
+  <line x1="27" y1="40" x2="27" y2="52" stroke="#ffd34d" stroke-width="2"/>
+  <line x1="2" y1="27" x2="14" y2="27" stroke="#ffd34d" stroke-width="2"/>
+  <line x1="40" y1="27" x2="52" y2="27" stroke="#ffd34d" stroke-width="2"/>
+</svg>
+
+<div id="banner"></div>
+<div id="warning"></div>
+
+<div id="title-screen" class="screen">
+  <h1>SKYWARD ARCHIPELAGO</h1>
+  <h2>Twelve rings. One island runway. Just enough fuel to make it interesting.</h2>
+  <p>Fly the gold ring, always the gold ring — cleared rings turn green.
+     Finish all twelve, then land back on the home runway for the big bonus.
+     Rings drip a little fuel into the tank; only a landing fills it.</p>
+  <p class="keys">Shift / Ctrl — throttle &nbsp;·&nbsp; W A S D or arrows — pitch &amp; roll &nbsp;·&nbsp;
+     B / Space — brake &nbsp;·&nbsp; Mouse drag — steer &nbsp;·&nbsp; Wheel — trim throttle</p>
+  <p>Bank to turn. Slow down before you land, stay above stall speed in the air,
+     and mind the terrain warning.</p>
+  <div class="go">Press any key to take off</div>
+</div>
+
+<div id="end-screen" class="screen">
+  <h1 id="end-title">COURSE COMPLETE!</h1>
+  <p id="end-detail"></p>
+  <div class="go">Press Enter to fly again</div>
+</div>
+
+<script src="vendor/three.min.js"></script>
+<script type="module" src="src/main.js"></script>
+</body>
+</html>
